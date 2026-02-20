@@ -1,0 +1,13 @@
+version: 0.2
+phases:
+  install:
+    commands:
+      - echo "Install phase"
+  build:
+    commands:
+      - echo "Build phase - nothing to compile for Python flask"
+artifacts:
+  files:
+    - app/**/*
+    - appspec.yml
+    - scripts/**/*
