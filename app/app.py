@@ -2,7 +2,7 @@ from flask import Flask
 app = Flask(__name__)
 @app.route("/")
 def index():
-    return "Deployed via CodePipeline CI/CD"!!!!, 200
+    return "Deployed via CodePipeline CI/CD", 200
 
 @app.route("/healthz")
 def healthz():
