@@ -1,13 +1,18 @@
 version: 0.2
+
 phases:
   install:
+    runtime-versions:
+      python: 3.9
     commands:
-      - echo "Install phase"
+      - echo "Installing dependencies..."
+      - pip3 install --upgrade pip
+      - pip3 install -r requirements.txt
+
   build:
     commands:
-      - echo "Build phase - nothing to compile for Python flask"
+      - echo "Build completed on $(date)"
+
 artifacts:
   files:
-    - app/**/*
-    - appspec.yml
-    - scripts/**/*
+    - '**/*'

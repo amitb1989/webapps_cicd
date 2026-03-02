@@ -1,0 +1,247 @@
+#!/bin/bash
+set -eux
+
+# Update & install Python and Git
+dnf -y update
+dnf -y install python3-pip git
+
+# Create app user
+id webapp >/dev/null 2>&1 || useradd -m -s /bin/bash webapp
+
+# App directory structure
+mkdir -p /home/webapp/{templates,static}
+chown -R webapp:webapp /home/webapp
+
+# --- Flask app: app.py ---
+cat > /home/webapp/app.py << 'PY'
+from flask import Flask, render_template
+app = Flask(__name__)
+
+@app.route("/")
+def index():
+    # Renders templates/index.html
+    return render_template("index.html"), 200
+
+@app.route("/healthz")
+def healthz():
+    return "ok", 200
+
+if __name__ == "__main__":
+    # Running on port 80 as root due to systemd config; keep 0.0.0.0 for ALB
+    app.run(host="0.0.0.0", port=80)
+PY
+
+# --- Template: templates/index.html ---
+cat > /home/webapp/templates/index.html << 'HTML'
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>HA WebApp • ALB + ASG</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <main class="page">
+    <header class="header">
+      <div class="badge">ALB</div>
+      <div class="plus">+</div>
+      <div class="badge alt">ASG</div>
+    </header>
+
+    <section class="hero card">
+      <h1>Highly Available WebApp</h1>
+      <p class="subtitle">Served via <strong>AWS Application Load Balancer</strong> and <strong>Auto Scaling Group</strong>.</p>
+      <div class="meta">
+        <div class="meta-item">
+          <span class="label">Health Check</span>
+          <a class="pill" href="/healthz">/healthz</a>
+        </div>
+        <div class="meta-item">
+          <span class="label">Runtime</span>
+          <span class="pill">Flask (Python)</span>
+        </div>
+        <div class="meta-item">
+          <span class="label">Port</span>
+          <span class="pill">80</span>
+        </div>
+      </div>
+      <div class="cta">
+        <a class="btn primary" href="https://docs.aws.amazon.com/elasticloadbalancing/latest/application/introduction.html" target="_blank" rel="noopener">Learn about ALB</a>
+        <a class="btn" href="https://docs.aws.amazon.com/autoscaling/ec2/userguide/auto-scaling-groups.html" target="_blank" rel="noopener">Learn about ASG</a>
+      </div>
+    </section>
+
+    <section class="grid">
+      <div class="tile">
+        <h3>Zero‑Downtime Ready</h3>
+        <p>Use rolling updates with instance health checks to avoid interruptions during deploys.</p>
+      </div>
+      <div class="tile">
+        <h3>Scales with Demand</h3>
+        <p>Target tracking or step scaling policies keep capacity aligned with load.</p>
+      </div>
+      <div class="tile">
+        <h3>Simple Health Probes</h3>
+        <p>ALB hits <code>/healthz</code> to keep only healthy instances in rotation.</p>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>© {{ 2026 }} HA WebApp • Flask • ALB + ASG</span>
+    </footer>
+  </main>
+</body>
+</html>
+HTML
+
+# --- Styles: static/styles.css ---
+cat > /home/webapp/static/styles.css << 'CSS'
+:root{
+  --bg:#0b1220;
+  --panel:#0f172a;
+  --muted:#94a3b8;
+  --text:#e5e7eb;
+  --accent:#22c55e;
+  --accent-2:#60a5fa;
+  --ring:rgba(96,165,250,.35);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji", "Segoe UI Symbol";
+  color:var(--text);
+  background: radial-gradient(1200px 800px at 70% -10%, #1e293b33, transparent), var(--bg);
+}
+.page{
+  max-width:1100px;
+  margin:0 auto;
+  padding:32px 20px 60px;
+}
+.header{
+  display:flex; align-items:center; gap:8px; margin-bottom:20px;
+}
+.badge{
+  background:linear-gradient(135deg, var(--accent), #16a34a);
+  color:#04110a; font-weight:800; letter-spacing:.5px;
+  padding:8px 12px; border-radius:10px; font-size:14px;
+  box-shadow:0 6px 18px rgba(34,197,94,.25);
+}
+.badge.alt{
+  background:linear-gradient(135deg, var(--accent-2), #2563eb);
+  color:#081021; box-shadow:0 6px 18px rgba(96,165,250,.25);
+}
+.plus{opacity:.6; font-weight:700}
+.card{
+  background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+  border:1px solid rgba(148,163,184,.15);
+  border-radius:16px; padding:28px;
+  box-shadow:0 20px 50px rgba(2,8,23,.35);
+  backdrop-filter: blur(8px);
+}
+.hero h1{margin:6px 0 8px; font-size:32px}
+.subtitle{margin:0 0 14px; color:var(--muted)}
+.meta{display:flex; gap:16px; flex-wrap:wrap; margin-top:10px}
+.meta-item{display:flex; align-items:center; gap:8px}
+.label{color:var(--muted); font-size:13px}
+.pill{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:6px 10px; border-radius:999px; font-size:13px;
+  background:#0b1220; border:1px solid rgba(148,163,184,.2);
+  color:var(--text); text-decoration:none;
+}
+.cta{margin-top:18px; display:flex; gap:10px; flex-wrap:wrap}
+.btn{
+  appearance:none; border:1px solid rgba(148,163,184,.25);
+  background:#0b1220; color:var(--text); padding:10px 14px; border-radius:10px;
+  cursor:pointer; text-decoration:none; transition:.15s transform ease, .15s box-shadow ease, .15s border-color ease;
+}
+.btn:hover{transform: translateY(-1px); border-color:var(--ring); box-shadow:0 8px 24px var(--ring)}
+.btn.primary{
+  background:linear-gradient(135deg, #10b981, #22c55e);
+  color:#05140c; border-color:transparent; font-weight:700;
+}
+.grid{
+  display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:18px;
+}
+.tile{
+  background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+  border:1px solid rgba(148,163,184,.15); border-radius:14px; padding:18px; color:var(--text);
+}
+.tile h3{margin:2px 0 8px}
+.footer{margin-top:22px; color:var(--muted); font-size:13px}
+@media (max-width:900px){
+  .grid{grid-template-columns:1fr 1fr}
+}
+@media (max-width:640px){
+  .grid{grid-template-columns:1fr}
+  .hero h1{font-size:26px}
+}
+CSS
+
+# Install Flask (pin a stable release)
+pip3 install "flask>=2,<4"
+
+# Systemd service (run as root to bind port 80; for least privilege, see note below)
+cat > /etc/systemd/system/webapp.service << 'UNIT'
+[Unit]
+Description=HA Flask WebApp
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/home/webapp
+ExecStart=/usr/bin/python3 /home/webapp/app.py
+Restart=always
+RestartSec=2
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+# Enable & start
+systemctl daemon-reload
+systemctl enable webapp
+systemctl start webapp
+
+# --- Install CodeDeploy agent (robust region detection, no jq needed) ---
+dnf -y install ruby wget
+
+# Try IMDSv2 for region; fall back to IMDSv1 AZ->region if needed
+IMDS=http://169.254.169.254
+TOKEN=$(curl -s -X PUT "${IMDS}/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" || true)
+
+if [ -n "$TOKEN" ]; then
+  # IMDSv2
+  az=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" "${IMDS}/latest/meta-data/placement/availability-zone" || true)
+else
+  # IMDSv1 fallback
+  az=$(curl -s "${IMDS}/latest/meta-data/placement/availability-zone" || true)
+fi
+
+# Convert AZ to region (e.g., ap-south-1a -> ap-south-1)
+region="${az::-1}"
+
+# Final sanity fallback (hardcode your region if detection failed)
+if [ -z "$region" ]; then
+  region="ap-south-1"
+fi
+
+echo "Resolved region: $region"
+
+cd /home/ec2-user
+installer_url="https://aws-codedeploy-${region}.s3.${region}.amazonaws.com/latest/install"
+echo "Fetching CodeDeploy installer from: $installer_url"
+wget -O install "$installer_url"
+chmod +x ./install
+./install auto
+
+systemctl enable codedeploy-agent
+systemctl start codedeploy-agent
+systemctl status codedeploy-agent --no-pager || true
+``
